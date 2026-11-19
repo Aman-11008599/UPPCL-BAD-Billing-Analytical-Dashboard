@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UPPCL Spot Billing Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#1d2433;--muted:#667085;--line:#e3e7ef;--accent:#1f5eff;--good:#12a150;--bad:#d92d20;--warn:#f79009;--target:#7a2cf5}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f1420;--card:#171e2e;--ink:#e7ecf5;--muted:#9aa6bb;--line:#26304a;--accent:#5b8dff;--good:#2fc06a;--bad:#f0655a;--warn:#ffb14a;--target:#b28bff}}
+:root[data-theme="dark"]{--bg:#0f1420;--card:#171e2e;--ink:#e7ecf5;--muted:#9aa6bb;--line:#26304a;--accent:#5b8dff;--good:#2fc06a;--bad:#f0655a;--warn:#ffb14a;--target:#b28bff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",Roboto,Arial,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:14px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+header h1{font-size:18px;margin:0}
+header .sub{color:var(--muted);font-size:12px}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 14px;border-radius:8px;cursor:pointer;font:inherit}
+nav button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+main{padding:18px 20px;max-width:1400px;margin:0 auto}
+.view{display:none}.view.on{display:block}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:14px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:12px;color:var(--muted)}
+select,input[type=text],input[type=month]{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;min-width:160px}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.icon{padding:5px 9px;font-size:13px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.grid2{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(460px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;position:relative;margin-bottom:14px}
+.card h3{margin:0 0 4px;font-size:15px}
+.card .hint{color:var(--muted);font-size:12px;margin-bottom:8px}
+.kpi .v{font-size:26px;font-weight:700}
+.kpi .l{color:var(--muted);font-size:12px}
+.kpi .t{font-size:12px;margin-top:4px}
+.good{color:var(--good)}.bad{color:var(--bad)}
+.chartbox{position:relative;height:340px}
+.chartbox.tall{height:460px}
+.dl{position:absolute;top:12px;right:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{background:var(--bg);position:sticky;top:0;cursor:pointer}
+.tablewrap{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.msg{padding:10px 12px;border-radius:8px;margin:8px 0;font-size:13px}
+.msg.ok{background:rgba(18,161,80,.12);color:var(--good)}
+.msg.err{background:rgba(217,45,32,.12);color:var(--bad)}
+.msg.info{background:rgba(31,94,255,.1);color:var(--accent)}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);background:var(--card)}
+.drop.over{border-color:var(--accent);color:var(--accent)}
+.muted{color:var(--muted)}
+@media (max-width:640px){main{padding:12px}.grid2{grid-template-columns:1fr}.chartbox{height:300px}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>UPPCL Spot Billing Dashboard</h1>
+    <div class="sub">Probe (downloaded) · OCR · Manual · Auto = Probe + OCR &nbsp;|&nbsp; Targets: Auto 95%, Total 99%</div>
+  </div>
+  <nav>
+    <button data-view="dash" class="on">Dashboard</button>
+    <button data-view="cmp">Comparison</button>
+    <button data-view="rep">Report</button>
+    <button data-view="upload">Upload &amp; Manage</button>
+  </nav>
+</header>
+<main>
+
+<!-- ============ DASHBOARD (current month) ============ -->
+<section class="view on" id="view-dash">
+  <div class="row"><div class="field"><label>Showing month</label><div><span class="pill" id="curMonth">—</span></div></div></div>
+  <div id="noData" class="msg info" style="display:none">No report uploaded yet. Go to <b>Upload &amp; Manage</b> and upload the monthly Excel/CSV raw data.</div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:stretch">
+    <div class="grid" id="kpis" style="flex:1 1 520px;grid-template-columns:repeat(3,minmax(0,1fr));align-content:stretch"></div>
+    <div class="card" style="flex:0 1 470px;margin:0">
+      <h3>Billing status of spot billables</h3>
+      <div class="hint">Share of spot billables, current month. Figures in lakh (L).</div>
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+        <div style="position:relative;width:230px;height:230px"><canvas id="cStatus"></canvas></div>
+        <div id="statusLegend" style="flex:1;min-width:170px"></div>
+      </div>
+      <button class="btn icon dl" data-dl="cStatus">⬇</button>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="card"><h3>DISCOM-wise: Auto &amp; Total %</h3><div class="hint">Auto target 95% · Total target 99%</div><div class="chartbox"><canvas id="cDiscomAT"></canvas></div><button class="btn icon dl" data-dl="cDiscomAT">⬇</button></div>
+    <div class="card"><h3>DISCOM-wise: Probe &amp; OCR billing %</h3><div class="hint">Share of Billed by MR. Right-hand figure = Auto %. Dashed line = state Auto %.</div><div class="chartbox"><canvas id="cDiscomPO"></canvas></div><button class="btn icon dl" data-dl="cDiscomPO">⬇</button></div>
+    <div class="card"><h3>Cluster-wise: Auto &amp; Total %</h3><div class="hint">Auto target 95% · Total target 99%</div><div class="chartbox tall"><canvas id="cClusterAT"></canvas></div><button class="btn icon dl" data-dl="cClusterAT">⬇</button></div>
+    <div class="card"><h3>Cluster-wise: Probe &amp; OCR billing %</h3><div class="hint">Share of Billed by MR. Right-hand figure = Auto %. Dashed line = state Auto %.</div><div class="chartbox tall"><canvas id="cClusterPO"></canvas></div><button class="btn icon dl" data-dl="cClusterPO">⬇</button></div>
+  </div>
+</section>
+
+<!-- ============ COMPARISON ============ -->
+<section class="view" id="view-cmp">
+  <div class="card">
+    <h3>Compare two months</h3>
+    <div class="hint">Pick any two uploaded months. Bars show the selected metric for each DISCOM or cluster.</div>
+    <div class="row">
+      <div class="field"><label>Month A</label><select id="cmpA"></select></div>
+      <div class="field"><label>Month B</label><select id="cmpB"></select></div>
+      <div class="field"><label>Level</label><select id="cmpLvl"><option value="discom">DISCOM-wise</option><option value="cluster">Cluster-wise</option></select></div>
+      <div class="field"><label>Metric</label><select id="cmpMetric">
+        <option value="probeP">Probe %</option><option value="ocrP">OCR %</option><option value="autoP">Auto %</option><option value="total">Total %</option></select></div>
+    </div>
+    <div class="chartbox tall"><canvas id="cCompare"></canvas></div>
+    <button class="btn icon dl" data-dl="cCompare">⬇</button>
+    <div class="tablewrap" style="margin-top:12px"><table id="cmpTbl"></table></div>
+  </div>
+  <div class="card">
+    <h3 id="trendTitle">Billing trend over months</h3>
+    <div class="hint">Choose a billing category, then DISCOM-wise (all DISCOMs) or Cluster-wise (one cluster at a time). Each point is that month's value.</div>
+    <div class="row">
+      <div class="field"><label>Billing category</label><select id="trendMetric">
+        <option value="probeP">Probe</option><option value="ocrP">OCR</option><option value="autoP">Auto</option><option value="total">Total billing</option></select></div>
+      <div class="field"><label>Level</label><select id="trendLvl"><option value="discom">DISCOM-wise</option><option value="cluster">Cluster-wise</option></select></div>
+      <div class="field" id="trendClusterWrap" style="display:none"><label>Cluster</label><select id="trendCluster"></select></div>
+    </div>
+    <div class="chartbox tall"><canvas id="cTrend"></canvas></div>
+    <button class="btn icon dl" data-dl="cTrend">⬇</button>
+  </div>
+  <div class="card">
+    <h3 id="muTitle">MU gap % trend over months</h3>
+    <div class="hint">MU gap = BILLED − MU_BILLED. MU gap % = MU gap ÷ BILLED × 100. Months uploaded before MU_BILLED was included show no point.</div>
+    <div class="row">
+      <div class="field"><label>Level</label><select id="muLvl"><option value="discom">DISCOM-wise</option><option value="cluster">Cluster-wise</option></select></div>
+      <div class="field" id="muClusterWrap" style="display:none"><label>Cluster</label><select id="muCluster"></select></div>
+    </div>
+    <div class="chartbox tall"><canvas id="cMuGap"></canvas></div>
+    <div class="tablewrap" style="margin-top:10px"><table id="muTbl"></table></div>
+    <button class="btn icon dl" data-dl="cMuGap">⬇</button>
+  </div>
+</section>
+
+<!-- ============ REPORT ============ -->
+<section class="view" id="view-rep">
+  <div class="card">
+    <h3>Monthly report</h3>
+    <div class="hint">Choose a month and level, then download. Each row shows Auto and Total against their targets.</div>
+    <div class="row">
+      <div class="field"><label>Month</label><input type="month" id="repMonth"></div>
+      <div class="field"><label>Level</label><select id="repLvl">
+        <option value="zone">Zone</option><option value="division">Division</option><option value="cluster">Cluster</option><option value="discom">DISCOM</option></select></div>
+      <button class="btn primary" id="repCsv">Download CSV</button>
+    </div>
+    <div class="tablewrap"><table id="repTbl"></table></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Worst list ranked by</label><select id="metricSel">
+      <option value="probe">Probe % (focus)</option><option value="auto">Auto %</option><option value="total">Total billing %</option></select></div>
+    <div class="field"><label>Month</label><span class="pill" id="worstMonth">—</span></div>
+  </div>
+  <div class="card">
+    <h3>Worst 5 zones</h3>
+    <div class="hint">Lowest by the ranking metric, with targets: Auto 95%, Total 99%</div>
+    <div class="tablewrap"><table id="worstZ"></table></div>
+  </div>
+  <div class="card">
+    <h3>Worst 5 divisions</h3>
+    <div class="hint">Lowest by the ranking metric, with targets: Auto 95%, Total 99%</div>
+    <div class="tablewrap"><table id="worstD"></table></div>
+  </div>
+</section>
+
+<!-- ============ UPLOAD & MANAGE (unchanged) ============ -->
+<section class="view" id="view-upload">
+  <div class="card">
+    <h3>Upload monthly raw data (Excel / CSV)</h3>
+    <div class="hint">One row per division with these columns: Discom, Zone, Circle, Division, Cluster, MRA, Spot_Billable, BILLED, Probe, OCR, MANUAL_BILL, MU_BILLED. Choose the report month first. Uploading the same month again replaces that month's data.</div>
+    <div class="row">
+      <div class="field"><label>Report month</label><input type="month" id="upMonth"></div>
+      <button class="btn" id="tplBtn">⬇ Download upload template (Excel)</button>
+    </div>
+    <div class="drop" id="drop">Drag &amp; drop the Excel or CSV file here, or <label style="color:var(--accent);cursor:pointer;text-decoration:underline">browse<input type="file" id="fileIn" accept=".xlsx,.xls,.csv" style="display:none"></label></div>
+    <div id="uploadMsgs"></div>
+  </div>
+  <div class="card">
+    <h3>Stored reports</h3>
+    <div class="hint">Saved on the office server and shared with everyone who opens the dashboard. Export a backup regularly.</div>
+    <div class="tablewrap"><table id="snapTbl"></table></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="expBtn">Export backup (JSON)</button>
+      <label class="btn" style="cursor:pointer">Import backup<input type="file" id="impIn" accept="application/json" style="display:none"></label>
+      <button class="btn danger" id="clearBtn">Delete ALL stored reports</button>
+    </div>
+  </div>
+</section>
+
+</main>
+<script>
+/* ---------- constants & state ---------- */
+const TGT = { auto: 95, total: 99 };
+const KEY = 'uppcl_spot_billing_v1';
+let DB = { snapshots: {} };          // { 'YYYY-MM-DD': { date, division:[rows], zone:[rows], fileNames, savedAt } }
+let memoryOnly = false;
+let charts = {};
+const $ = id => document.getElementById(id);
+const DISCOM_ORDER = ['PVVNL', 'DVVNL', 'MVVNL', 'PuVVNL', 'KESCo'];
+const PALETTE = ['#1f5eff','#12a150','#f79009','#d92d20','#7a2cf5','#0ea5e9','#e11d8e','#14b8a6','#84cc16','#f97316','#6366f1','#ef4444','#eab308','#0f766e','#a855f7','#64748b'];
+
+/* ---------- storage: shared office server (same reports for everyone) ---------- */
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || r.statusText);
+  return body;
+}
+async function loadDB() {
+  try {
+    DB = { snapshots: await api('/api/snapshots') };
+  } catch (e) {
+    DB = { snapshots: {} };
+    $('uploadMsgs').innerHTML = `<div class="msg err">Cannot reach the dashboard server (${e.message}). Open this page from the server address, e.g. http://server-ip:8080, not as a file.</div>`;
+  }
+}
+async function saveSnapshot(iso) {
+  await api(`/api/snapshots/${iso}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(DB.snapshots[iso]) });
+}
+async function removeSnapshot(iso) {
+  await api(`/api/snapshots/${iso}`, { method: 'DELETE' });
+}
+function dates() { return Object.keys(DB.snapshots).sort(); }
+
+/* ---------- months: one month can hold several report dates; the latest date wins ---------- */
+function months() { return [...new Set(dates().map(d => d.slice(0, 7)))].sort(); }
+function snapFor(ym) { if (!ym) return null; const d = dates().filter(x => x.startsWith(ym)); return d.length ? d[d.length - 1] : null; }
+function monthLabel(ym) {
+  if (!ym) return '—';
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+}
+function currentMonth() { const m = months(); return m.length ? m[m.length - 1] : null; }
+
+/* ---------- number & date helpers ---------- */
+const NUM = /^\d{1,3}(?:,\d{2,3})*(?:\.\d+)?$|^\d+(?:\.\d+)?$/;
+const toNum = s => Number(String(s).replace(/,/g, ''));
+const pct = (a, b) => (b ? (a / b) * 100 : 0);
+const fmtN = n => (Number(n) || 0).toLocaleString('en-IN');
+const fmtP = n => (Number(n) || 0).toFixed(2) + '%';
+function isoFromText(text) {
+  const m = text.match(/(\d{2})[.\-\/](\d{2})[.\-\/](\d{4})/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+}
+function prettyDate(iso) { const [y, m, d] = iso.split('-'); return `${d}.${m}.${y}`; }
+
+/* ---------- row classification ---------- */
+function classify(name) {
+  const n = name.trim();
+  if (/^total$/i.test(n)) return 'total';
+  if (/^(MVVNL|PVVNL|DVVNL|PuVVNL|KESCo)$/i.test(n)) return 'discom';
+  if (/^CLUSTER-\d+/i.test(n)) return 'cluster';
+  if (/ZONE$/.test(n)) return 'zone';
+  if (/^(EDC|EUDC)\b/.test(n) || /Circle$/i.test(n)) return 'circle';
+  return 'division';
+}
+
+/* Each data row ends with 9 numbers:
+   Spot billables | Total billed | % | Probe | % | OCR | % | Auto | % */
+function parseLines(lines) {
+  const rows = [];
+  for (const raw of lines) {
+    const tok = raw.replace(/\s+/g, ' ').trim().split(' ');
+    if (tok.length < 10) continue;
+    const nums = tok.slice(-9);
+    if (!nums.every(x => NUM.test(x))) continue;
+    const name0 = tok.slice(0, -9).join(' ').trim();
+    if (!name0) continue;
+    const v = nums.map(toNum);
+    const level = classify(name0);
+    const name = level === 'cluster' ? name0.replace(/\s*\(.*\)\s*$/, '') : name0;  // agency names dropped
+    rows.push({ name, level, billable: v[0], billed: v[1], probe: v[3], ocr: v[5], auto: v[7],
+                zone: null, cluster: null, discom: null });
+  }
+  // hierarchy: a group of rows is followed by its parent total row
+  let units = [], zones = [], clusters = [];
+  for (const r of rows) {
+    if (r.level === 'division' || r.level === 'circle') units.push(r);
+    else if (r.level === 'zone') { units.forEach(u => u.zone = r.name); units = []; zones.push(r); }
+    else if (r.level === 'cluster') { zones.forEach(z => z.cluster = r.name); zones = []; clusters.push(r); }
+    else if (r.level === 'discom') { clusters.forEach(c => c.discom = r.name); clusters = []; }
+  }
+  const zMap = {};
+  rows.filter(r => r.level === 'zone').forEach(z => zMap[z.name] = z);
+  rows.forEach(r => {
+    if (r.level === 'division' || r.level === 'circle') {
+      const z = zMap[r.zone];
+      if (z) { r.cluster = z.cluster; r.discom = z.discom; }
+    }
+  });
+  return rows;
+}
+
+/* Derived metrics for a row */
+function metrics(r) {
+  return {
+    total: pct(r.billed, r.billable),   // Total billing % of spot billable (target 99)
+    probeP: pct(r.probe, r.billed),     // Probe % of billed by MR
+    ocrP: pct(r.ocr, r.billed),         // OCR % of billed by MR
+    autoP: pct(r.auto, r.billed),       // Auto % of billed by MR (target 95)
+  };
+}
+</script>
+<script>
+/* ---------- raw data reading (Excel / CSV, one row per division) ---------- */
+const RAW_COLS = { discom: 'Discom', zone: 'Zone', circle: 'Circle', division: 'Division', cluster: 'Cluster', mra: 'MRA',
+  billable: 'Spot_Billable', billed: 'BILLED', probe: 'Probe', ocr: 'OCR', manual: 'MANUAL_BILL', mu: 'MU_BILLED' };
+const normKey = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+const cleanName = s => String(s).replace(/\s+/g, ' ').trim();
+function toNumber(v) {
+  if (typeof v === 'number') return v;
+  const n = Number(String(v ?? '').replace(/,/g, '').trim());
+  return v === null || v === '' || !isFinite(n) ? NaN : n;
+}
+function normDiscom(s) {
+  const t = cleanName(s);
+  return DISCOM_ORDER.find(d => d.toLowerCase() === t.toLowerCase()) || t;
+}
+/* Sum division rows into a parent level (zone / cluster / discom) */
+function rollUp(divs, keyFn, level, extra) {
+  const m = new Map();
+  for (const r of divs) {
+    const k = keyFn(r);
+    if (!m.has(k)) m.set(k, { name: k, level, billable: 0, billed: 0, probe: 0, ocr: 0, auto: 0, manual: 0, mu: 0, ...extra(r) });
+    const o = m.get(k);
+    for (const f of ['billable', 'billed', 'probe', 'ocr', 'auto', 'manual', 'mu']) o[f] += r[f];
+  }
+  return [...m.values()];
+}
+
+async function readRaw(file) {
+  if (typeof XLSX === 'undefined') throw new Error('Excel reader could not load (internet/CDN blocked?)');
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(ws, { defval: null });
+  if (!json.length) throw new Error(`${file.name}: no data rows found.`);
+  const keys = Object.keys(json[0]);
+  const col = {};
+  for (const [field, label] of Object.entries(RAW_COLS)) {
+    const k = keys.find(x => normKey(x) === normKey(label));
+    if (!k) throw new Error(`${file.name}: column "${label}" is missing. Check the header row.`);
+    col[field] = k;
+  }
+  const divs = [];
+  let skipped = 0, manualMismatch = 0;
+  for (const r of json) {
+    const name = cleanName(r[col.division] ?? '');
+    const nums = ['billable', 'billed', 'probe', 'ocr', 'manual', 'mu'].map(f => toNumber(r[col[f]]));
+    if (!name || nums.some(isNaN)) { skipped++; continue; }
+    const d = {
+      name, level: 'division', discom: normDiscom(r[col.discom]), zone: cleanName(r[col.zone]),
+      circle: cleanName(r[col.circle]), cluster: cleanName(r[col.cluster]), mra: cleanName(r[col.mra]),
+      billable: nums[0], billed: nums[1], probe: nums[2], ocr: nums[3], manual: nums[4], mu: nums[5],
+    };
+    d.auto = d.probe + d.ocr;                                   // Auto = Probe + OCR
+    if (d.billed - d.probe - d.ocr !== d.manual) manualMismatch++;
+    divs.push(d);
+  }
+  if (!divs.length) throw new Error(`${file.name}: no valid rows found (check numbers and division names).`);
+  const zones = rollUp(divs, r => r.zone, 'zone', r => ({ discom: r.discom, cluster: r.cluster }));
+  const clusters = rollUp(divs, r => r.cluster, 'cluster', r => ({ discom: r.discom }));
+  const discoms = rollUp(divs, r => r.discom, 'discom', () => ({}));
+  return { file: file.name, rows: [...divs, ...zones, ...clusters, ...discoms], count: divs.length, skipped, manualMismatch };
+}
+
+async function handleFiles(files) {
+  const ym = $('upMonth').value;
+  if (!ym) {
+    $('uploadMsgs').innerHTML = '<div class="msg err">Choose the report month first, then upload the file.</div>';
+    return;
+  }
+  const msgs = [];
+  for (const f of files) {
+    try {
+      const r = await readRaw(f);
+      const date = ym + '-01';                                   // one entry per month
+      const snap = { date, division: r.rows, zone: [], savedAt: new Date().toISOString(), fileNames: { raw: r.file } };
+      DB.snapshots[date] = snap;
+      await saveSnapshot(date);
+      const sums = sumRows(r.rows.filter(x => x.level === 'discom'));
+      const warn = [
+        r.skipped ? `${r.skipped} row(s) skipped (missing division name or non-numeric values)` : '',
+        r.manualMismatch ? `${r.manualMismatch} row(s) where MANUAL_BILL ≠ BILLED − Probe − OCR` : '',
+      ].filter(Boolean);
+      msgs.push(`<div class="msg ok"><b>${r.file}</b> → ${monthLabel(ym)}: ${fmtN(r.count)} division rows saved.
+        <br>Spot billable ${fmtN(sums.billable)} · Billed ${fmtN(sums.billed)} · Probe ${fmtN(sums.probe)} · OCR ${fmtN(sums.ocr)} · Manual ${fmtN(sums.billed - sums.probe - sums.ocr)}
+        ${warn.length ? '<br>⚠ ' + warn.join('; ') : '<br>✓ All rows read correctly.'}</div>`);
+    } catch (e) {
+      msgs.push(`<div class="msg err">${e.message}</div>`);
+    }
+  }
+  $('uploadMsgs').innerHTML = msgs.join('');
+  refreshAll();
+}
+
+/* ---------- data access ---------- */
+// The Divisionwise report alone is sufficient (it has division, circle, zone, cluster and DISCOM rows).
+// The Zonewise report is only a fallback when no Divisionwise report is stored.
+function getRows(iso, level) {
+  const s = DB.snapshots[iso];
+  if (!s) return [];
+  const src = (s.division && s.division.length) ? s.division : (s.zone || []);
+  return src.filter(r => r.level === level);
+}
+function clusterRows(iso) { return getRows(iso, 'cluster').sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })); }
+function discomRows(iso) {
+  const rows = getRows(iso, 'discom');
+  return DISCOM_ORDER.map(n => rows.find(r => r.name.toLowerCase() === n.toLowerCase())).filter(Boolean);
+}
+function sumRows(rows) {
+  const t = rows.reduce((a, r) => ({ billable: a.billable + r.billable, billed: a.billed + r.billed, probe: a.probe + r.probe, ocr: a.ocr + r.ocr, auto: a.auto + r.auto }), { billable: 0, billed: 0, probe: 0, ocr: 0, auto: 0 });
+  return { ...t, ...metrics(t) };
+}
+function metricOf(r, key) {
+  // works for raw rows and for shaped rows (which already carry their percentages)
+  const m = r.probeP !== undefined ? r : metrics(r);
+  return key === 'probe' || key === 'probeP' ? m.probeP : key === 'auto' || key === 'autoP' ? m.autoP : key === 'ocrP' ? m.ocrP : m.total;
+}
+const metricLabel = k => ({ probe: 'Probe %', probeP: 'Probe %', ocrP: 'OCR %', auto: 'Auto %', autoP: 'Auto %', total: 'Total %' })[k];
+
+/* ---------- chart helpers ---------- */
+function mkChart(id, cfg) {
+  if (charts[id]) charts[id].destroy();
+  Chart.defaults.color = getComputedStyle(document.body).color;
+  Chart.defaults.borderColor = 'rgba(128,128,128,.18)';
+  charts[id] = new Chart($(id), cfg);
+}
+function withTargets(labels, datasets, showAuto, showTotal) {
+  const ds = datasets.slice();
+  if (showAuto) ds.push({ type: 'line', label: 'Auto target 95%', data: labels.map(() => TGT.auto), borderColor: '#7a2cf5', borderDash: [6, 4], pointRadius: 0, borderWidth: 2 });
+  if (showTotal) ds.push({ type: 'line', label: 'Total target 99%', data: labels.map(() => TGT.total), borderColor: '#d92d20', borderDash: [6, 4], pointRadius: 0, borderWidth: 2 });
+  return ds;
+}
+const pctAxis = { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } };
+const pctTip = { callbacks: { label: c => `${c.dataset.label}: ${Number(c.parsed.y ?? c.parsed.x).toFixed(2)}%` } };
+
+/* download a chart as PNG (white background) */
+function downloadChart(id) {
+  const src = $(id);
+  if (!src || !charts[id]) return;
+  const off = document.createElement('canvas');
+  off.width = src.width; off.height = src.height;
+  const ctx = off.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, off.width, off.height);
+  ctx.drawImage(src, 0, 0);
+  const a = document.createElement('a');
+  a.href = off.toDataURL('image/png');
+  a.download = `${id}_${currentMonth() || 'report'}.png`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+</script>
+<script>
+/* ---------- shared row shaping for tables ---------- */
+function parentOf(r, lvl) {
+  if (lvl === 'division') return r.zone || '';
+  if (lvl === 'zone') return r.cluster || '';
+  if (lvl === 'cluster') return r.discom || '';
+  return '—';
+}
+function shapeRow(r, lvl) {
+  const m = metrics(r);
+  return { name: r.name, parent: parentOf(r, lvl), billable: r.billable, billed: r.billed,
+           total: m.total, probe: r.probe, probeP: m.probeP, ocrP: m.ocrP, autoP: m.autoP,
+           totalOk: m.total >= TGT.total, autoOk: m.autoP >= TGT.auto };
+}
+const tick = ok => `<span class="${ok ? 'good' : 'bad'}">${ok ? '✓' : '✗'}</span>`;
+
+/* ---------- DASHBOARD: current month only ---------- */
+function renderKPIs(iso, prevIso) {
+  const cur = sumRows(discomRows(iso));
+  const prev = prevIso ? sumRows(discomRows(prevIso)) : null;
+  const d = (a, b) => (b == null ? '' : `<div class="t ${a - b >= 0 ? 'good' : 'bad'}">${a - b >= 0 ? '▲' : '▼'} ${Math.abs(a - b).toFixed(2)} pp vs previous month</div>`);
+  const status = (v, t) => `<div class="t ${v >= t ? 'good' : 'bad'}">${v >= t ? '✓ meets' : '✗ below'} target ${t}%</div>`;
+  const k = (label, val, extra) => `<div class="card kpi" style="margin:0"><div class="l">${label}</div><div class="v">${val}</div>${extra}</div>`;
+  $('kpis').innerHTML = [
+    k('Total billed by MR · Spot billables', fmtN(cur.billed), `<div class="t" style="font-size:13px">Spot billables: <b>${fmtN(cur.billable)}</b></div>`),
+    k('Total billing %', fmtP(cur.total), `<div class="t muted">${fmtN(cur.billed)} billed of ${fmtN(cur.billable)}</div>`),
+    k('Auto billing % (Probe + OCR)', fmtP(cur.autoP), `<div class="t muted">${fmtN(cur.auto)} billings</div>`),
+    k('Probe billing %', fmtP(cur.probeP), `<div class="t muted">${fmtN(cur.probe)} billings</div>`),
+    k('OCR billing %', fmtP(cur.ocrP), `<div class="t muted">${fmtN(cur.ocr)} billings</div>`),
+    k('Manual billing %', fmtP(100 - cur.autoP), `<div class="t muted">${fmtN(cur.billed - cur.auto)} billings</div>`),
+  ].join('');
+}
+
+function renderDashboard() {
+  const cm = currentMonth();
+  $('curMonth').textContent = monthLabel(cm);
+  const iso = snapFor(cm);
+  if (!iso) return;
+  const ms = months();
+  const prevIso = ms.length > 1 ? snapFor(ms[ms.length - 2]) : null;
+  renderKPIs(iso, prevIso);
+
+  const ds = discomRows(iso);
+  const dl = ds.map(r => r.name), dm = ds.map(metrics);
+  mkChart('cDiscomAT', { type: 'bar', data: { labels: dl, datasets: withTargets(dl, [
+      { label: 'Auto %', data: dm.map(x => x.autoP), backgroundColor: '#1f5eff' },
+      { label: 'Total billing %', data: dm.map(x => x.total), backgroundColor: '#12a150' }], true, true) },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: pctAxis }, plugins: { tooltip: pctTip } } });
+  mkAutoBars('cDiscomPO', dl, dm);
+
+  const cs = clusterRows(iso), cl = cs.map(c => c.name), cm2 = cs.map(metrics);
+  mkChart('cClusterAT', { type: 'bar', data: { labels: cl, datasets: withTargets(cl, [
+      { label: 'Auto %', data: cm2.map(x => x.autoP), backgroundColor: '#1f5eff' },
+      { label: 'Total billing %', data: cm2.map(x => x.total), backgroundColor: '#12a150' }], true, true) },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: pctAxis }, plugins: { tooltip: pctTip } } });
+  mkAutoBars('cClusterPO', cl, cm2);
+}
+
+/* ---------- Probe / OCR / Not-auto stacked bars (DISCOM & cluster) ---------- */
+const autoBarPlugin = {
+  id: 'autoBar',
+  afterDatasetsDraw(chart, args, opts) {
+    if (!opts || !opts.auto) return;
+    const { ctx, chartArea, scales } = chart;
+    ctx.save();
+    ctx.textBaseline = 'middle';
+    // value labels inside the Probe and OCR segments
+    [0, 1].forEach(di => {
+      const ds = chart.data.datasets[di];
+      chart.getDatasetMeta(di).data.forEach((bar, i) => {
+        const v = ds.data[i];
+        if (v < 5) return;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '600 12px "Segoe UI", Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(v.toFixed(1), (bar.x + bar.base) / 2, bar.y);
+      });
+    });
+    // Auto % at the end of each bar: green at or above the state average, red below
+    chart.getDatasetMeta(2).data.forEach((bar, i) => {
+      const a = opts.auto[i];
+      ctx.fillStyle = a >= opts.ref ? '#12a150' : '#d92d20';
+      ctx.font = '700 13px "Segoe UI", Arial, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(a.toFixed(1) + '%', bar.x + 8, bar.y);
+    });
+    // dashed reference line at the state-wide Auto %
+    const x = scales.x.getPixelForValue(opts.ref);
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#667085';
+    ctx.beginPath(); ctx.moveTo(x, chartArea.top - 6); ctx.lineTo(x, chartArea.bottom); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#667085';
+    ctx.font = '12px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('State ' + opts.ref.toFixed(2) + '%', x, chartArea.top - 14);
+    ctx.restore();
+  }
+};
+function mkAutoBars(id, labels, metricRows) {
+  // metricRows: [{probeP, ocrP, autoP}] in the same order as labels; bars sorted by Auto % (highest first)
+  const order = labels.map((_, i) => i).sort((a, b) => metricRows[b].autoP - metricRows[a].autoP);
+  const L = order.map(i => labels[i]), M = order.map(i => metricRows[i]);
+  const state = sumRows(discomRows(snapFor(currentMonth()))).autoP;
+  mkChart(id, { type: 'bar',
+    data: { labels: L, datasets: [
+      { label: 'Probe', data: M.map(m => m.probeP), backgroundColor: '#14b8a6', borderWidth: 0 },
+      { label: 'OCR', data: M.map(m => m.ocrP), backgroundColor: '#f59e0b', borderWidth: 0 },
+      { label: 'Not auto', data: M.map(m => 100 - m.autoP), backgroundColor: '#94a3b8', borderWidth: 0 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      layout: { padding: { right: 70, top: 22 } },
+      scales: { x: { stacked: true, min: 0, max: 100, ticks: { callback: v => v + '%' } },
+                y: { stacked: true, grid: { display: false } } },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.x.toFixed(2)}%` } },
+        autoBar: { auto: M.map(m => m.autoP), ref: state } } },
+    plugins: [autoBarPlugin] });
+}
+
+/* ---------- COMPARISON ---------- */
+function fillMonthSelects() {
+  const ms = months().slice().reverse();
+  const opts = ms.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join('');
+  const a = $('cmpA').value, b = $('cmpB').value;
+  $('cmpA').innerHTML = opts; $('cmpB').innerHTML = opts;
+  if (ms.includes(a)) $('cmpA').value = a; else if (ms.length > 1) $('cmpA').value = ms[1];
+  if (ms.includes(b)) $('cmpB').value = b; else if (ms.length) $('cmpB').value = ms[0];
+}
+function renderCompare() {
+  const lvl = $('cmpLvl').value, key = $('cmpMetric').value;
+  const ma = $('cmpA').value, mb = $('cmpB').value;
+  const isoA = snapFor(ma), isoB = snapFor(mb);
+  const rowsOf = iso => !iso ? [] : lvl === 'discom' ? discomRows(iso) : clusterRows(iso);
+  const A = rowsOf(isoA), B = rowsOf(isoB);
+  const names = lvl === 'discom' ? DISCOM_ORDER.filter(n => A.concat(B).some(r => r.name.toLowerCase() === n.toLowerCase()))
+                                  : [...new Set(A.concat(B).map(r => r.name))].sort((x, y) => x.localeCompare(y, undefined, { numeric: true }));
+  const find = (rows, n) => rows.find(r => r.name.toLowerCase() === n.toLowerCase());
+  const va = names.map(n => { const r = find(A, n); return r ? metricOf(r, key) : null; });
+  const vb = names.map(n => { const r = find(B, n); return r ? metricOf(r, key) : null; });
+  const lab = metricLabel(key);
+  mkChart('cCompare', { type: 'bar', data: { labels: names, datasets: [
+      { label: `${monthLabel(ma)} · ${lab}`, data: va, backgroundColor: '#94a3b8' },
+      { label: `${monthLabel(mb)} · ${lab}`, data: vb, backgroundColor: '#1f5eff' }] },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: pctAxis }, plugins: { tooltip: pctTip } } });
+  const f = v => v == null ? '—' : fmtP(v);
+  const dlt = (x, y) => x == null || y == null ? '—' : `<span class="${y - x >= 0 ? 'good' : 'bad'}">${(y - x >= 0 ? '+' : '') + (y - x).toFixed(2)} pp</span>`;
+  $('cmpTbl').innerHTML = `<thead><tr><th>${lvl === 'discom' ? 'DISCOM' : 'Cluster'}</th><th>${monthLabel(ma)}</th><th>${monthLabel(mb)}</th><th>Change</th></tr></thead><tbody>` +
+    names.map((n, i) => `<tr><td>${n}</td><td>${f(va[i])}</td><td>${f(vb[i])}</td><td>${dlt(va[i], vb[i])}</td></tr>`).join('') + '</tbody>';
+}
+function renderTrend() {
+  const key = $('trendMetric').value, lvl = $('trendLvl').value;
+  const ms = months();
+  const rowsOf = m => { const iso = snapFor(m); return !iso ? [] : lvl === 'discom' ? discomRows(iso) : clusterRows(iso); };
+  $('trendClusterWrap').style.display = lvl === 'cluster' ? '' : 'none';
+  let names;
+  if (lvl === 'discom') {
+    names = DISCOM_ORDER;                       // all DISCOMs shown together (only 5 lines)
+  } else {
+    // clusters: one at a time, to keep the chart readable
+    const all = [...new Set(ms.flatMap(m => rowsOf(m).map(r => r.name)))].sort((x, y) => x.localeCompare(y, undefined, { numeric: true }));
+    const prev = $('trendCluster').value;
+    $('trendCluster').innerHTML = all.map(n => `<option value="${n}">${n}</option>`).join('');
+    $('trendCluster').value = all.includes(prev) ? prev : (all[0] || '');
+    names = $('trendCluster').value ? [$('trendCluster').value] : [];
+  }
+  $('trendTitle').textContent = `${metricLabel(key)} trend over months — ${lvl === 'discom' ? 'DISCOM-wise' : (names[0] || 'no cluster')}`;
+  const datasets = names.map((n, i) => ({
+    label: n, borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length],
+    tension: .25, pointRadius: 4, spanGaps: true,
+    data: ms.map(m => { const r = rowsOf(m).find(x => x.name.toLowerCase() === n.toLowerCase()); return r ? metricOf(r, key) : null; }) }));
+  const labels = ms.map(monthLabel);
+  mkChart('cTrend', { type: 'line', data: { labels, datasets: withTargets(labels, datasets, key === 'autoP', key === 'total') },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: pctAxis }, plugins: { tooltip: pctTip } } });
+}
+
+/* ---------- BILLING STATUS (doughnut, current month) ---------- */
+const centerTextPlugin = {
+  id: 'centerText',
+  afterDraw(chart) {
+    const t = chart.options.plugins.centerText || {};
+    if (!t.value) return;
+    const { ctx, chartArea } = chart;
+    const x = (chartArea.left + chartArea.right) / 2, y = (chartArea.top + chartArea.bottom) / 2;
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = getComputedStyle(document.body).color;
+    ctx.font = '700 26px "Segoe UI", Arial, sans-serif';
+    ctx.fillText(t.value, x, y - 12);
+    ctx.font = '12px "Segoe UI", Arial, sans-serif';
+    ctx.fillStyle = '#667085';
+    ctx.fillText('auto billed', x, y + 10);
+    ctx.fillText('(of billables)', x, y + 25);
+    ctx.restore();
+  }
+};
+function renderStatus() {
+  const iso = snapFor(currentMonth());
+  if (!iso) { $('statusLegend').innerHTML = ''; return; }
+  const t = sumRows(discomRows(iso));
+  const parts = [
+    { name: 'Probe / Downloaded', v: t.probe, c: '#14b8a6' },
+    { name: 'OCR', v: t.ocr, c: '#f59e0b' },
+    { name: 'Manual (MR) billing', v: t.billed - t.probe - t.ocr, c: '#94a3b8' },
+    { name: 'Not yet billed', v: t.billable - t.billed, c: '#dde3ee' },
+  ];
+  const pctOf = v => pct(v, t.billable);
+  const fmtL = v => (v / 100000).toFixed(2) + ' L';
+  mkChart('cStatus', { type: 'doughnut',
+    data: { labels: parts.map(p => p.name), datasets: [{ data: parts.map(p => p.v), backgroundColor: parts.map(p => p.c), borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '68%',
+      plugins: {
+        legend: { display: false },
+        centerText: { value: pctOf(t.probe + t.ocr).toFixed(2) + '%' },
+        tooltip: { callbacks: { label: c => `${c.label}: ${fmtL(c.raw)} (${pctOf(c.raw).toFixed(2)}%)` } } } },
+    plugins: [centerTextPlugin] });
+  $('statusLegend').innerHTML = parts.map(p => `<div style="display:flex;align-items:center;gap:10px;margin:12px 0">
+    <span style="width:14px;height:14px;border-radius:3px;background:${p.c};display:inline-block;flex:none"></span>
+    <div><div>${p.name}</div><div class="muted" style="font-size:13px">${fmtL(p.v)} · ${pctOf(p.v).toFixed(2)}%</div></div></div>`).join('');
+}
+
+/* ---------- MU GAP % trend (BILLED − MU_BILLED, as % of BILLED) ---------- */
+function muGapPct(r) { return r.mu == null || !r.billed ? null : pct(r.billed - r.mu, r.billed); }
+const MU_POINT_STYLES = ['circle', 'triangle', 'rect', 'rectRot', 'star', 'cross'];
+function renderMuTable(names, ms, rowsOf) {
+  const lvlLabel = $('muLvl').value === 'discom' ? 'DISCOM' : 'Cluster';
+  $('muTbl').innerHTML = `<thead><tr><th>${lvlLabel}</th>${ms.map(m => `<th>${monthLabel(m)}</th>`).join('')}</tr></thead><tbody>` +
+    names.map(n => `<tr><td>${n}</td>${ms.map(m => {
+      const r = rowsOf(m).find(x => x.name.toLowerCase() === n.toLowerCase());
+      const v = r ? muGapPct(r) : null;
+      return `<td>${v == null ? '—' : v.toFixed(2) + '%'}</td>`;
+    }).join('')}</tr>`).join('') + '</tbody>';
+}
+function renderMuGap() {
+  const lvl = $('muLvl').value;
+  const ms = months();
+  const rowsOf = m => { const iso = snapFor(m); return !iso ? [] : lvl === 'discom' ? discomRows(iso) : clusterRows(iso); };
+  $('muClusterWrap').style.display = lvl === 'cluster' ? '' : 'none';
+  let names;
+  if (lvl === 'discom') {
+    names = DISCOM_ORDER;                       // default: all DISCOMs
+  } else {
+    const all = [...new Set(ms.flatMap(m => rowsOf(m).map(r => r.name)))].sort((x, y) => x.localeCompare(y, undefined, { numeric: true }));
+    const prev = $('muCluster').value;
+    $('muCluster').innerHTML = all.map(n => `<option value="${n}">${n}</option>`).join('');
+    $('muCluster').value = all.includes(prev) ? prev : (all[0] || '');
+    names = $('muCluster').value ? [$('muCluster').value] : [];
+  }
+  $('muTitle').textContent = `MU gap % trend over months — ${lvl === 'discom' ? 'DISCOM-wise' : (names[0] || 'no cluster')}`;
+  const datasets = names.map((n, i) => ({
+    label: n, borderColor: PALETTE[i % PALETTE.length], backgroundColor: PALETTE[i % PALETTE.length],
+    borderWidth: 2.5, borderDash: i % 2 ? [7, 4] : [], tension: .25,
+    pointStyle: MU_POINT_STYLES[i % MU_POINT_STYLES.length], pointRadius: 6, pointHoverRadius: 8, spanGaps: true,
+    data: ms.map(m => { const r = rowsOf(m).find(x => x.name.toLowerCase() === n.toLowerCase()); return r ? muGapPct(r) : null; }) }));
+  mkChart('cMuGap', { type: 'line', data: { labels: ms.map(monthLabel), datasets },
+    options: { responsive: true, maintainAspectRatio: false,
+      // y-axis fits the data (gaps are a few %), so the lines are not squashed against 0–100%
+      scales: { y: { beginAtZero: true, ticks: { callback: v => Number(v).toFixed(1) + '%' } } },
+      plugins: { tooltip: pctTip, legend: { position: 'bottom' } } } });
+  renderMuTable(names, ms, rowsOf);
+}
+
+/* ---------- REPORT ---------- */
+let repRows = [];
+function reportMonth() { return $('repMonth').value || currentMonth(); }
+function renderReport() {
+  const ym = reportMonth();
+  const iso = snapFor(ym);
+  const lvl = $('repLvl').value;
+  $('worstMonth').textContent = monthLabel(ym);
+  if (!iso) {
+    $('repTbl').innerHTML = `<tbody><tr><td class="muted">No report stored for this month.</td></tr></tbody>`;
+    $('worstZ').innerHTML = $('worstD').innerHTML = '';
+    repRows = [];
+    return;
+  }
+  repRows = getRows(iso, lvl).map(r => shapeRow(r, lvl));
+  const head = `<thead><tr><th>Name</th><th>Parent</th><th>Spot billables</th><th>Billed by MR</th><th>Total %<br><small>target 99</small></th><th>Auto %<br><small>target 95</small></th><th>Probe %</th><th>Probe nos</th><th>OCR %</th></tr></thead>`;
+  const row = r => `<tr><td>${r.name}</td><td>${r.parent}</td><td>${fmtN(r.billable)}</td><td>${fmtN(r.billed)}</td><td>${fmtP(r.total)} ${tick(r.totalOk)}</td><td>${fmtP(r.autoP)} ${tick(r.autoOk)}</td><td>${fmtP(r.probeP)}</td><td>${fmtN(r.probe)}</td><td>${fmtP(r.ocrP)}</td></tr>`;
+  $('repTbl').innerHTML = head + '<tbody>' + repRows.map(row).join('') + '</tbody>';
+
+  const key = $('metricSel').value;
+  const worst = lv => getRows(iso, lv).map(r => shapeRow(r, lv))
+    .sort((a, b) => metricOf(a, key) - metricOf(b, key)).slice(0, 5);
+  const wHead = `<thead><tr><th>Name</th><th>Parent</th><th>Total %<br><small>target 99</small></th><th>Auto %<br><small>target 95</small></th><th>Probe %</th><th>OCR %</th></tr></thead>`;
+  const wRow = r => `<tr><td>${r.name}</td><td>${r.parent}</td><td>${fmtP(r.total)} ${tick(r.totalOk)}</td><td>${fmtP(r.autoP)} ${tick(r.autoOk)}</td><td>${fmtP(r.probeP)}</td><td>${fmtP(r.ocrP)}</td></tr>`;
+  $('worstZ').innerHTML = wHead + '<tbody>' + worst('zone').map(wRow).join('') + '</tbody>';
+  $('worstD').innerHTML = wHead + '<tbody>' + worst('division').map(wRow).join('') + '</tbody>';
+}
+function downloadReportCSV() {
+  const ym = reportMonth(), lvl = $('repLvl').value;
+  const cols = [['name', 'Name'], ['parent', 'Parent'], ['billable', 'Spot billables'], ['billed', 'Billed by MR'],
+    ['total', 'Total %'], ['totalOk', 'Total target 99 met'], ['autoP', 'Auto %'], ['autoOk', 'Auto target 95 met'],
+    ['probe', 'Probe nos'], ['probeP', 'Probe %'], ['ocrP', 'OCR %']];
+  const esc = v => typeof v === 'boolean' ? (v ? 'Yes' : 'No') : typeof v === 'number' ? v.toFixed(2) : `"${String(v).replace(/"/g, '""')}"`;
+  const body = repRows.map(r => cols.map(([k]) => esc(r[k])).join(','));
+  const csv = '﻿' + [cols.map(c => c[1]).join(','), ...body].join('\n');
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `UPPCL_${lvl}_${ym}.csv`);
+}
+</script>
+<script>
+/* ---------- upload template (Excel with the exact column headers + a column guide) ---------- */
+function downloadTemplate() {
+  if (typeof XLSX === 'undefined') { alert('The Excel library could not load (internet/CDN blocked?).'); return; }
+  const headers = ['Discom', 'Zone', 'Circle', 'Division', 'Cluster', 'MRA', 'Spot_Billable', 'BILLED', 'Probe', 'OCR', 'MANUAL_BILL', 'MU_BILLED'];
+  const wb = XLSX.utils.book_new();
+  // First sheet is the one the uploader reads: headers only, one row per division goes below.
+  const data = XLSX.utils.aoa_to_sheet([headers]);
+  data['!cols'] = headers.map(h => ({ wch: Math.max(14, h.length + 2) }));
+  XLSX.utils.book_append_sheet(wb, data, 'Data');
+  const guide = [
+    ['Column', 'Meaning', 'Example'],
+    ['Discom', 'DISCOM: MVVNL, PVVNL, DVVNL, PuVVNL or KESCO', 'DVVNL'],
+    ['Zone', 'Zone name', 'AGRA ZONE'],
+    ['Circle', 'Circle name (EDC / EUDC ...)', 'EDC AGRA'],
+    ['Division', 'Division name (EDD / EUDD ...). One row per division.', 'EDD KHERAGARH'],
+    ['Cluster', 'Cluster name', 'CLUSTER-05'],
+    ['MRA', 'Meter reading agency', 'TERA'],
+    ['Spot_Billable', 'Number of spot billables', 28904],
+    ['BILLED', 'Total billing by meter readers (count)', 27585],
+    ['Probe', 'Probe / downloaded billing count', 5574],
+    ['OCR', 'OCR billing count', 5483],
+    ['MANUAL_BILL', 'Manual billing count = BILLED − Probe − OCR', 16528],
+    ['MU_BILLED', 'Metered-reading based billing count (MU)', 25136],
+    [],
+    ['Notes: enter numbers only (no text in number columns). Keep the header row exactly as in the Data sheet. The report month is chosen on the upload form, not in this file.'],
+  ];
+  const gs = XLSX.utils.aoa_to_sheet(guide);
+  gs['!cols'] = [{ wch: 14 }, { wch: 60 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, gs, 'Column guide');
+  XLSX.writeFile(wb, 'UPPCL_billing_upload_template.xlsx');
+}
+
+/* ---------- upload & manage (unchanged behaviour) ---------- */
+function renderSnapTable() {
+  const ds = dates().slice().reverse();
+  $('snapTbl').innerHTML = `<thead><tr><th>Report month</th><th>Files</th><th>Zones/Clusters</th><th>Divisions</th><th>Saved</th><th></th></tr></thead><tbody>` +
+    (ds.map(d => { const s = DB.snapshots[d]; return `<tr>
+      <td>${monthLabel(d.slice(0, 7))}</td>
+      <td style="text-align:left">${Object.entries(s.fileNames || {}).map(([t, f]) => `<span class="pill">${t}: ${f}</span>`).join(' ') || '—'}</td>
+      <td>${(s.zone || []).length}</td><td>${(s.division || []).length}</td>
+      <td>${s.savedAt ? new Date(s.savedAt).toLocaleString('en-IN') : '—'}</td>
+      <td><button class="btn icon danger" data-del="${d}">Delete</button></td></tr>`; }).join('') || `<tr><td colspan="6" class="muted">Nothing stored yet</td></tr>`) + `</tbody>`;
+}
+async function deleteSnapshot(iso) {
+  if (!confirm(`Delete all data for ${prettyDate(iso)} for everyone? This cannot be undone (export a backup first if needed).`)) return;
+  delete DB.snapshots[iso];
+  try { await removeSnapshot(iso); } catch (e) { alert('Delete failed: ' + e.message); }
+  $('uploadMsgs').innerHTML = `<div class="msg info">Deleted report as of ${prettyDate(iso)}.</div>`;
+  refreshAll();
+}
+async function clearAll() {
+  if (!confirm('Delete ALL stored reports for everyone? This cannot be undone.')) return;
+  for (const d of dates()) await removeSnapshot(d);
+  DB = { snapshots: {} };
+  refreshAll();
+}
+function downloadBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function exportBackup() {
+  downloadBlob(new Blob([JSON.stringify({ app: 'UPPCL Spot Billing Dashboard', exportedAt: new Date().toISOString(), ...DB }, null, 1)], { type: 'application/json' }),
+    `UPPCL_billing_backup_${new Date().toISOString().slice(0, 10)}.json`);
+}
+async function importBackup(file) {
+  try {
+    const j = JSON.parse(await file.text());
+    if (!j.snapshots) throw new Error('Not a valid backup file.');
+    const n = Object.keys(j.snapshots).length;
+    for (const d of Object.keys(j.snapshots)) {
+      DB.snapshots[d] = j.snapshots[d];
+      await saveSnapshot(d);
+    }
+    $('uploadMsgs').innerHTML = `<div class="msg ok">Imported ${n} report date(s). Existing dates with the same date were replaced.</div>`;
+  } catch (e) { $('uploadMsgs').innerHTML = `<div class="msg err">Import failed: ${e.message}</div>`; }
+  refreshAll();
+}
+
+/* ---------- orchestration ---------- */
+function refreshAll() {
+  const ms = months();
+  $('noData').style.display = ms.length ? 'none' : 'block';
+  fillMonthSelects();
+  if (!$('repMonth').value && ms.length) $('repMonth').value = currentMonth();
+  if (typeof Chart !== 'undefined') {
+    renderDashboard();
+    renderStatus();
+    renderCompare();
+    renderTrend();
+    renderMuGap();
+    renderReport();
+  }
+  renderSnapTable();
+}
+
+/* ---------- wiring ---------- */
+function showView(name) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + name));
+  setTimeout(refreshAll, 0);   // re-render so charts size correctly when the view appears
+}
+document.addEventListener('DOMContentLoaded', async () => {
+  if (typeof Chart === 'undefined') $('uploadMsgs').innerHTML = '<div class="msg err">Chart library did not load (internet/CDN blocked?). Charts will not show.</div>';
+  await loadDB();
+  document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
+  ['cmpA', 'cmpB', 'cmpLvl', 'cmpMetric'].forEach(id => $(id).addEventListener('change', renderCompare));
+  ['trendMetric', 'trendLvl', 'trendCluster'].forEach(id => $(id).addEventListener('change', renderTrend));
+  ['muLvl', 'muCluster'].forEach(id => $(id).addEventListener('change', renderMuGap));
+  ['repMonth', 'repLvl', 'metricSel'].forEach(id => $(id).addEventListener('change', renderReport));
+  $('repCsv').addEventListener('click', downloadReportCSV);
+  document.querySelectorAll('[data-dl]').forEach(b => b.addEventListener('click', () => downloadChart(b.dataset.dl)));
+  $('fileIn').addEventListener('change', e => { handleFiles([...e.target.files]); e.target.value = ''; });
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => handleFiles([...e.dataTransfer.files].filter(f => /\.(xlsx|xls|csv)$/i.test(f.name))));
+  $('snapTbl').addEventListener('click', e => { const d = e.target.dataset.del; if (d) deleteSnapshot(d); });
+  $('expBtn').addEventListener('click', exportBackup);
+  $('impIn').addEventListener('change', e => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ''; });
+  $('clearBtn').addEventListener('click', clearAll);
+  $('tplBtn').addEventListener('click', downloadTemplate);
+  refreshAll();
+});
+</script>
+
